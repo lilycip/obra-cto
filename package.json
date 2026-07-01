@@ -1,6 +1,6 @@
 {
   "name": "obra-cto",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": false,
   "description": "Obra CTO: a local-first MCP that scores a codebase's Build Readiness. Your code never leaves your machine; your own Claude reads it and runs your tests. The free preview of Obra's role lineup.",
   "license": "Apache-2.0",
