@@ -36,6 +36,35 @@ or inferred, D claim only, E speculation. The score is built from grade A and C
 evidence, what is true in your code, not what a deck says. When the CTO runs your
 tests and they pass, reliability becomes grade A. A deck-scorer can never earn that.
 
+## What a run looks like
+
+Point it at a real project and you get a scored report with a ranked risk register.
+Here is a run on a scrappy Supabase app (anonymized):
+
+```
+# Obra CTO Score: financeapp
+## 46 / 100 — Not yet ready
+Assessed as: mobile (react-native, expo)  |  Backend: supabase
+
+| Dimension        | Score | Evidence |
+|------------------|-------|----------|
+| Security         | 6/25  | A |
+| Product reality  | 20/20 | A |
+| Robustness       | 3/15  | A |
+| Architecture     | 9/15  | A |
+| Maintainability  | 6/15  | A |
+| Deploy readiness | 2/10  | C |
+
+## Top Risks
+- [critical] RLS policies defined but never enabled; data may be open to any authenticated user
+    Fix: enable row level security on every table, then verify a second user cannot read your rows.
+- [high] Access control gap: a privileged action checks only that the user is logged in, not that they own the resource
+- [medium] No tests found
+```
+
+On a well-built app it scores high and credits the good engineering. It is calibrated,
+not a fear machine.
+
 ## Tools
 
 - `scan_project` reads the project and returns mechanical signals.
@@ -53,27 +82,23 @@ A normal run is: scan, check dependencies, run tests, prepare the code review, t
 
 ## Install
 
-Build it:
-
-```bash
-npm install
-npm run build
-```
-
 Add it to your Claude MCP config (Claude Desktop or Claude Code):
 
 ```json
 {
   "mcpServers": {
     "obra-cto": {
-      "command": "node",
-      "args": ["/absolute/path/to/obra-cto/dist/index.js"]
+      "command": "npx",
+      "args": ["-y", "obra-cto"]
     }
   }
 }
 ```
 
 Then ask your Claude: "Score this project's build readiness with Obra CTO."
+
+Prefer to run from source? Clone the repo, run `npm install && npm run build`, and
+point the config at `node /absolute/path/to/obra-cto/dist/index.js`.
 
 ## What this is not
 
@@ -83,9 +108,16 @@ an investor's CTO would ask, answered from your real code.
 
 ## What's next
 
-Build with Obra is where the rest of the lineup lands first, the Obra CFO for funding
-materials and each new role as it ships, alongside the build-in-public method behind
-them. Join at https://www.skool.com/build-with-obra-5361.
+The Obra CTO is the free preview. To go further:
+
+- **The Method** — the full playbook for shipping production software with AI, the
+  disciplines that make code score like the example above, each lesson with a paste-in
+  prompt or tool you can use today.
+- **The rest of the team** — the Obra CFO for funding-ready materials, and each new
+  role as it ships.
+- **Obra itself, in beta** — the AI employee that runs your back office. Members go first.
+
+It all lives in Build with Obra: https://www.skool.com/build-with-obra-5361
 
 ## License
 
