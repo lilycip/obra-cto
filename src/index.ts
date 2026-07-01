@@ -196,8 +196,10 @@ server.registerTool(
       .join('\n\n');
     const header =
       `# Code review bundle: ${bundle.root}\n` +
-      `Assessed as: ${bundle.projectType}${signals.frameworks.length ? ` (${signals.frameworks.join(', ')})` : ''}\n` +
+      `Assessed as: ${bundle.projectType}${signals.frameworks.length ? ` (${signals.frameworks.join(', ')})` : ''}` +
+      `${signals.backends.length ? ` | backend: ${signals.backends.join(', ')}` : ''}\n` +
       `${bundle.files.length} file(s) selected${bundle.truncated ? ' (truncated to budget)' : ''}.\n\n` +
+      `## System map (the shape, for the design red-team)\n\`\`\`\n${bundle.systemMap}\n\`\`\`\n\n` +
       `${checklistMd}\n\n` +
       `## What to do next\n${bundle.instructions}`;
     const fileBlocks = bundle.files.map(

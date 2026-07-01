@@ -54,6 +54,22 @@ const DATA_LAYER_EXTS = new Set(['.sql', '.prisma', '.graphql']);
 
 const ENTRY_HINTS = ['index', 'main', 'app', 'server', 'router', 'routes'];
 
+/**
+ * Build a compact source-file tree — the system's shape. Design red-team needs the
+ * whole structure to reason about layering and coupling, not just the sampled files.
+ * Capped so a huge repo stays readable; the biggest files are marked as god-file candidates.
+ */
+function buildSystemMap(candidates: Candidate[], cap = 200): string {
+  const sorted = [...candidates].sort((a, b) => a.rel.localeCompare(b.rel));
+  const shown = sorted.slice(0, cap);
+  const big = new Set(
+    [...candidates].sort((a, b) => b.bytes - a.bytes).slice(0, 5).filter((c) => c.bytes > 12000).map((c) => c.rel),
+  );
+  const lines = shown.map((c) => `${c.rel}${big.has(c.rel) ? '  <- large (god-file candidate)' : ''}`);
+  const header = `Source files: ${candidates.length}${candidates.length > cap ? ` (showing ${cap})` : ''}`;
+  return `${header}\n${lines.join('\n')}`;
+}
+
 /** Split a path into lowercased word tokens, breaking on separators AND camelCase. */
 function pathTokens(rel: string): Set<string> {
   return new Set(
@@ -76,6 +92,8 @@ export type CodeReviewBundle = {
   projectType: ProjectType;
   files: ReviewFile[];
   truncated: boolean;
+  /** The source-file tree — the system's shape, for reasoning about design. */
+  systemMap: string;
   checklist: { sections: ChecklistSection[] };
   instructions: string;
 };
@@ -159,6 +177,24 @@ const UNIVERSAL_SECURITY: string[] = [
   'Unsafe dynamic execution (eval, deserialization).',
 ];
 
+/**
+ * Design red-team — critique the DECISIONS, not just the code. This is the part
+ * that makes it a CTO and not a linter: name the load-bearing choices, judge them
+ * for this app's purpose and stage, and PROPOSE better ones with the rationale.
+ * Generative, not just detective. Stage-calibrated so a prototype is not told to
+ * build like an enterprise.
+ */
+const DESIGN_REDTEAM: string[] = [
+  'Judge for the STAGE. A prototype should stay simple; flag only decisions that will actually hurt this app at its current stage or its obvious next step. Do not demand enterprise patterns from an MVP.',
+  'Name the load-bearing design decisions before judging: the data model, WHERE authorization / trust is enforced, how data flows (state, sync vs async), the layering (UI vs logic vs data), and the key external dependencies.',
+  'For each decision: is it sound for this app\'s purpose? What would a senior architect change, and what does the change buy? Propose the alternative, do not just name the flaw.',
+  'Trust boundaries: where does the design assume something it should not (trusting the client, single-user assumptions in a multi-user app, happy-path only, no failure or retry handling)?',
+  'Data model: does it express ownership and integrity correctly? What breaks with real data (deletes, nulls, orphans, concurrency)?',
+  'Complexity cliff: what breaks or becomes painful first as this grows 10x in users or features?',
+  'Highest-leverage change: if they could make ONE architectural change, what is it and what does it unlock?',
+  'Credit what is genuinely well-designed and should be kept.',
+];
+
 const ARCHITECTURE: string[] = [
   'Separation of concerns; coupling and cohesion; god-files and god-functions.',
   'Consistent patterns; testability (injectable dependencies, isolated side effects).',
@@ -239,7 +275,8 @@ export function buildChecklist(
   }
   sections.push({ title: 'Security (universal)', items: UNIVERSAL_SECURITY });
   if (projectType !== 'ai-agent' && platform) sections.push(platform);
-  sections.push({ title: 'Architecture', items: ARCHITECTURE });
+  sections.push({ title: 'Design red-team (the decisions, not just the code)', items: DESIGN_REDTEAM });
+  sections.push({ title: 'Architecture (code structure)', items: ARCHITECTURE });
   return { sections };
 }
 
@@ -277,6 +314,7 @@ export async function prepareCodeReview(
   } = options;
   const absRoot = path.resolve(root);
   const candidates = (await collect(absRoot)).sort((a, b) => b.weight - a.weight);
+  const systemMap = buildSystemMap(candidates);
 
   const files: ReviewFile[] = [];
   let used = 0;
@@ -311,6 +349,7 @@ export async function prepareCodeReview(
     projectType,
     files,
     truncated,
+    systemMap,
     checklist: buildChecklist(projectType, backends),
     instructions: INSTRUCTIONS,
   };

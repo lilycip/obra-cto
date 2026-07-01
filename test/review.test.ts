@@ -77,6 +77,15 @@ describe('prepareCodeReview', () => {
     expect(bundle.instructions.length).toBeGreaterThan(0);
   });
 
+  it('includes a system map listing the source files (the shape for design review)', async () => {
+    const bundle = await prepareCodeReview(root, { maxFiles: 14 });
+    expect(bundle.systemMap).toMatch(/Source files:/);
+    expect(bundle.systemMap).toMatch(/auth\.ts/);
+    expect(bundle.systemMap).toMatch(/schema\.sql/);
+    // The 35KB file is marked as a god-file candidate.
+    expect(bundle.systemMap).toMatch(/huge\.ts.*god-file/);
+  });
+
   it('tailors the checklist to the project type passed in', async () => {
     const bundle = await prepareCodeReview(root, { maxFiles: 14, projectType: 'ai-agent' });
     expect(bundle.projectType).toBe('ai-agent');
@@ -96,12 +105,23 @@ describe('buildChecklist', () => {
     expect(web.sections.some((s) => s.title === 'Web security')).toBe(true);
   });
 
-  it('always includes Security and Architecture sections', () => {
+  it('always includes Security, Design red-team, and Architecture sections', () => {
     for (const t of ['web', 'api', 'mobile', 'cli', 'library', 'unknown', 'ai-agent'] as const) {
       const titles = buildChecklist(t).sections.map((s) => s.title);
       expect(titles.some((x) => /security/i.test(x))).toBe(true);
-      expect(titles).toContain('Architecture');
+      expect(titles.some((x) => /design red-team/i.test(x))).toBe(true);
+      expect(titles.some((x) => /architecture/i.test(x))).toBe(true);
     }
+  });
+
+  it('puts the design red-team ahead of the code-structure section and is generative', () => {
+    const cl = buildChecklist('web');
+    const designIdx = cl.sections.findIndex((s) => /design red-team/i.test(s.title));
+    const archIdx = cl.sections.findIndex((s) => /code structure/i.test(s.title));
+    expect(designIdx).toBeLessThan(archIdx);
+    const items = cl.sections[designIdx].items.join(' ');
+    expect(items).toMatch(/stage/i); // stage-calibrated
+    expect(items).toMatch(/propose|highest-leverage/i); // generative, not just detective
   });
 
   it('adds a Backend-as-a-Service section, ahead of universal security, when a backend is present', () => {
