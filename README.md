@@ -117,7 +117,7 @@ The Obra CTO is the free preview. To go further:
   role as it ships.
 - **Obra itself, in beta** — the AI employee that runs your back office. Members go first.
 
-It all lives in Build with Obra: https://www.skool.com/build-with-obra-5361
+It all lives in Build with Obra: https://www.skool.com/build-with-obra-5361/about
 
 ## License
 

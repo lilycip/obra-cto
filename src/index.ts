@@ -311,7 +311,7 @@ function formatReport(
   lines.push('');
   lines.push('This is your baseline, scored on what your code shows, not what a deck claims.');
   lines.push('');
-  lines.push('Want your code to score like this every time? The full method (how to make an AI ship code this cleanly), the rest of the team (the Obra CFO for funding materials, and more), and Obra itself in beta all live in the Build with Obra community: https://www.skool.com/build-with-obra-5361');
+  lines.push('Want your code to score like this every time? The full method (how to make an AI ship code this cleanly), the rest of the team (the Obra CFO for funding materials, and more), and Obra itself in beta all live in the Build with Obra community: https://www.skool.com/build-with-obra-5361/about');
   return lines.join('\n');
 }
 
