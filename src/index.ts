@@ -27,8 +27,9 @@ import { scanProject, type BuildStage } from './scan.js';
 import { scoreBuildReadiness, type TestResult, type QualitativeInput } from './baf.js';
 import { prepareCodeReview } from './review.js';
 import { checkDependencies } from './deps.js';
+import { buildReportJson, writeCtoReport, REPORT_DIR, REPORT_JSON, TOOL_VERSION } from './report.js';
 
-const server = new McpServer({ name: 'obra-cto', version: '0.0.1' });
+const server = new McpServer({ name: 'obra-cto', version: TOOL_VERSION });
 
 const STAGES = ['prototype', 'mvp', 'growth'] as const;
 
@@ -228,9 +229,15 @@ server.registerTool(
       qualitative: QUALITATIVE_SCHEMA.optional().describe(
         'Your structured security and architecture assessment from prepare_code_review. Supplying it upgrades those dimensions to grade A.',
       ),
+      write_report: z
+        .boolean()
+        .optional()
+        .describe(
+          `Write the report to ${REPORT_DIR}/ in the project (default true), so the Obra CFO can read it later. Set false to skip writing.`,
+        ),
     },
   },
-  async ({ path, stage, tests_total, tests_passed, tests_failed, qualitative }) => {
+  async ({ path, stage, tests_total, tests_passed, tests_failed, qualitative, write_report }) => {
     const root = path ?? process.cwd();
     const signals = await scanProject(root);
     const chosenStage: BuildStage = stage ?? signals.suggestedStage;
@@ -243,8 +250,35 @@ server.registerTool(
             ...(tests_failed !== undefined ? { failed: tests_failed } : {}),
           }
         : null;
-    const report = scoreBuildReadiness(signals, testResult, chosenStage, qualitative as QualitativeInput | undefined);
-    return { content: [{ type: 'text', text: formatReport(report, signals.manifest.name, signals.projectType, signals.frameworks) }] };
+    const qual = qualitative as QualitativeInput | undefined;
+    const report = scoreBuildReadiness(signals, testResult, chosenStage, qual);
+    const md = formatReport(report, signals.manifest.name, signals.projectType, signals.frameworks);
+
+    let handoffNote = '';
+    if (write_report !== false) {
+      const json = buildReportJson({
+        name: signals.manifest.name,
+        root,
+        projectType: signals.projectType,
+        frameworks: signals.frameworks,
+        backends: signals.backends,
+        stage: chosenStage,
+        report,
+        testResult,
+        codeReviewed: Boolean(qual && (qual.security || qual.architecture)),
+      });
+      try {
+        const written = await writeCtoReport(root, json, md);
+        handoffNote =
+          `\n\n---\nSaved to \`${REPORT_DIR}/${REPORT_JSON}\` (and a readable copy alongside). ` +
+          `The Obra CFO reads this to turn your build evidence into a funding case. ` +
+          `Add \`${REPORT_DIR}/\` to your .gitignore if you don't want it committed.`;
+        void written;
+      } catch (err) {
+        handoffNote = `\n\n---\nCould not write the report file: ${(err as Error).message}`;
+      }
+    }
+    return { content: [{ type: 'text', text: md + handoffNote }] };
   },
 );
 
@@ -256,7 +290,7 @@ function formatSignals(s: Awaited<ReturnType<typeof scanProject>>): string {
   lines.push(`- Ecosystem: ${s.manifest.ecosystem}; dependencies: ${s.manifest.dependencyCount}; lockfile: ${s.manifest.hasLockfile ? 'yes' : 'no'}`);
   lines.push(`- Project type: ${s.projectType}${s.frameworks.length ? ` (${s.frameworks.join(', ')})` : ''}`);
   if (s.backends.length) lines.push(`- Backend-as-a-Service: ${s.backends.join(', ')} (data is protected by access rules, not client code)`);
-  lines.push(`- Source: ${s.sourceFileCount} files, ~${s.totalLoc} lines; languages: ${Object.keys(s.languages).join(', ') || 'none detected'}`);
+  lines.push(`- Source: ${s.sourceFileCount} files, about ${s.totalLoc} lines; languages: ${Object.keys(s.languages).join(', ') || 'none detected'}`);
   lines.push(`- Tests: ${s.tests.present ? `${s.tests.testFileCount} file(s)` : 'none'}${s.tests.testCommand ? `; command: ${s.tests.testCommand}` : ''}`);
   lines.push(`- CI: ${s.ci.present ? s.ci.files.join(', ') : 'none detected'}`);
   lines.push(`- Docs: README ${s.hasReadme ? 'yes' : 'no'}, LICENSE ${s.hasLicense ? 'yes' : 'no'}`);
