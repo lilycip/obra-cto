@@ -11,11 +11,17 @@ beforeAll(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'obra-cto-review-'));
   const w = (rel: string, content: string) => fs.writeFile(path.join(root, rel), content, 'utf8');
   await fs.mkdir(path.join(root, 'src'), { recursive: true });
+  await fs.mkdir(path.join(root, 'src', 'components'), { recursive: true });
+  await fs.mkdir(path.join(root, 'db'), { recursive: true });
   await w('src/auth.ts', 'export function login() {}\n'.repeat(20)); // security-named
   await w('src/index.ts', 'export const main = 1;\n'.repeat(20)); // entry point
   await w('src/util.ts', 'export const u = 1;\n'.repeat(20)); // general
   await w('src/huge.ts', '// big\n'.repeat(5000)); // ~35KB, must be capped
   await w('src/foo.test.ts', 'test stuff\n'.repeat(20)); // test, deprioritized
+  // Data/policy layer: the crown jewel for BaaS apps, must be selected + ranked high.
+  await w('db/schema.sql', 'create table t ();\ncreate policy p on t for select using (true);\n'.repeat(10));
+  // False-positive guard: "AddButton" contains the substring "db" but is NOT a db file.
+  await w('src/components/AddButton.tsx', 'export const AddButton = () => null;\n'.repeat(20));
 });
 
 afterAll(async () => {
@@ -40,6 +46,22 @@ describe('prepareCodeReview', () => {
   it('ranks the security-named file into the bundle', async () => {
     const bundle = await prepareCodeReview(root, { maxFiles: 14, maxBytes: 90_000, maxBytesPerFile: 12_000 });
     expect(bundle.files.some((f) => f.path.endsWith('auth.ts'))).toBe(true);
+  });
+
+  it('selects the SQL schema and ranks the data/policy layer at the top', async () => {
+    const bundle = await prepareCodeReview(root, { maxFiles: 14, maxBytes: 90_000, maxBytesPerFile: 12_000 });
+    const schema = bundle.files.find((f) => f.path.endsWith('schema.sql'));
+    expect(schema).toBeDefined();
+    expect(schema!.reason).toMatch(/data\/policy layer/);
+    // The crown jewel outranks everything else.
+    expect(bundle.files[0].path.endsWith('schema.sql')).toBe(true);
+  });
+
+  it('does not flag a UI file as security just because its name contains a hint substring', async () => {
+    const bundle = await prepareCodeReview(root, { maxFiles: 14, maxBytes: 90_000, maxBytesPerFile: 12_000 });
+    const btn = bundle.files.find((f) => f.path.endsWith('AddButton.tsx'));
+    // "AddButton" contains "db"; token matching must not treat it as security-relevant.
+    if (btn) expect(btn.reason).not.toMatch(/security-relevant/);
   });
 
   it('respects the total byte budget', async () => {
@@ -80,5 +102,21 @@ describe('buildChecklist', () => {
       expect(titles.some((x) => /security/i.test(x))).toBe(true);
       expect(titles).toContain('Architecture');
     }
+  });
+
+  it('adds a Backend-as-a-Service section, ahead of universal security, when a backend is present', () => {
+    const cl = buildChecklist('mobile', ['supabase']);
+    const baasIdx = cl.sections.findIndex((s) => /Backend-as-a-Service/i.test(s.title));
+    const univIdx = cl.sections.findIndex((s) => /universal/i.test(s.title));
+    expect(baasIdx).toBeGreaterThanOrEqual(0);
+    expect(cl.sections[baasIdx].title).toMatch(/supabase/i);
+    expect(baasIdx).toBeLessThan(univIdx);
+    // The RLS-enabled-vs-defined check must be present (the flagship BaaS failure).
+    expect(cl.sections[baasIdx].items.join(' ')).toMatch(/ENABLED.*not just DEFINED|inert until RLS/i);
+  });
+
+  it('omits the Backend-as-a-Service section when no backend is detected', () => {
+    const cl = buildChecklist('mobile', []);
+    expect(cl.sections.some((s) => /Backend-as-a-Service/i.test(s.title))).toBe(false);
   });
 });

@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { scanProject, detectProjectType } from '../src/scan.js';
+import { scanProject, detectProjectType, detectBackends } from '../src/scan.js';
 
 let root: string;
 
@@ -125,5 +125,22 @@ describe('detectProjectType', () => {
   it('is library when a manifest exists but nothing matches, unknown otherwise', () => {
     expect(detectProjectType(['left-pad'], opts).type).toBe('library');
     expect(detectProjectType([], { ...opts, ecosystemKnown: false }).type).toBe('unknown');
+  });
+});
+
+describe('detectBackends', () => {
+  it('detects Supabase and Firebase from their SDKs', () => {
+    expect(detectBackends(['@supabase/supabase-js', 'react'])).toContain('supabase');
+    expect(detectBackends(['firebase'])).toContain('firebase');
+    expect(detectBackends(['react-native-firebase'])).toContain('firebase');
+  });
+
+  it('returns an empty list when no BaaS SDK is present', () => {
+    expect(detectBackends(['express', 'left-pad'])).toEqual([]);
+  });
+
+  it('does not false-match on substrings', () => {
+    // "firebase-tools-lookalike" is not the real SDK; exact-name match only.
+    expect(detectBackends(['notfirebase', 'supabaseish'])).toEqual([]);
   });
 });

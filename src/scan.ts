@@ -31,6 +31,9 @@ const SOURCE_EXTS = new Set([
   '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
   '.py', '.go', '.rs', '.java', '.rb', '.php', '.cs',
   '.vue', '.svelte', '.c', '.cpp', '.h', '.hpp', '.swift', '.kt',
+  // Data / policy layer. For BaaS apps (Supabase, Firebase, Prisma) the real
+  // security surface lives here, not in the UI code.
+  '.sql', '.prisma', '.graphql',
 ]);
 
 export type ProjectSignals = {
@@ -65,6 +68,12 @@ export type ProjectSignals = {
   projectType: ProjectType;
   /** Recognised frameworks/SDKs found in the dependencies (for display). */
   frameworks: string[];
+  /**
+   * Backend-as-a-Service platforms detected (Supabase, Firebase, ...). For these,
+   * the data is protected only by the platform's access rules (RLS / security
+   * rules), so those rules are the security surface, not the client code.
+   */
+  backends: string[];
   suggestedStage: BuildStage;
 };
 
@@ -101,6 +110,30 @@ const TYPE_DEPS: { type: ProjectType; deps: string[] }[] = [
   },
   { type: 'cli', deps: ['commander', 'yargs', 'oclif', '@oclif/core', 'inquirer', 'clipanion'] },
 ];
+
+/**
+ * Backend-as-a-Service SDKs. When present, the app's data is guarded by the
+ * platform's access rules (Supabase RLS, Firebase security rules), not by the
+ * client. Detecting one flips on the BaaS security lens in the code review.
+ */
+const BACKEND_DEPS: { name: string; deps: string[] }[] = [
+  { name: 'supabase', deps: ['@supabase/supabase-js', '@supabase/auth-helpers-nextjs', '@supabase/ssr'] },
+  { name: 'firebase', deps: ['firebase', 'firebase-admin', '@firebase/app', '@angular/fire', 'react-native-firebase'] },
+  { name: 'appwrite', deps: ['appwrite', 'node-appwrite'] },
+  { name: 'pocketbase', deps: ['pocketbase'] },
+  { name: 'convex', deps: ['convex'] },
+  { name: 'amplify', deps: ['aws-amplify', '@aws-amplify/core'] },
+];
+
+/** Detect BaaS platforms from dependency names (exact match). */
+export function detectBackends(depNames: string[]): string[] {
+  const names = new Set(depNames.map((d) => d.toLowerCase()));
+  const found: string[] = [];
+  for (const { name, deps } of BACKEND_DEPS) {
+    if (deps.some((d) => names.has(d.toLowerCase()))) found.push(name);
+  }
+  return found;
+}
 
 const SECRET_PATTERNS: { name: string; re: RegExp }[] = [
   { name: 'aws_access_key', re: /AKIA[0-9A-Z]{16}/ },
@@ -254,6 +287,7 @@ export async function scanProject(root: string): Promise<ProjectSignals> {
     largestSourceFiles: largest.slice(0, 5),
     projectType,
     frameworks,
+    backends: detectBackends(manifest.dependencyNames),
     suggestedStage: 'mvp',
   };
   signals.suggestedStage = suggestStage(signals);

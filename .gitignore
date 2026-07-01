@@ -7,3 +7,7 @@ dist/
 !.env.example
 coverage/
 .vitest/
+
+# Local dogfood scripts (run the engine on target repos; not shipped)
+harness.mjs
+score-proof.mjs

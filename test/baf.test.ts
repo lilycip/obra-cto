@@ -29,6 +29,7 @@ function makeSignals(overrides: Partial<ProjectSignals> = {}): ProjectSignals {
     largestSourceFiles: [{ path: 'src/index.ts', loc: 400 }],
     projectType: 'web',
     frameworks: [],
+    backends: [],
     suggestedStage: 'mvp',
     ...overrides,
   };

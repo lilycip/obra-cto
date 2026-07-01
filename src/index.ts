@@ -188,6 +188,7 @@ server.registerTool(
     const signals = await scanProject(root);
     const bundle = await prepareCodeReview(root, {
       projectType: signals.projectType,
+      backends: signals.backends,
       maxFiles: max_files ?? 12,
     });
     const checklistMd = bundle.checklist.sections
@@ -251,6 +252,7 @@ function formatSignals(s: Awaited<ReturnType<typeof scanProject>>): string {
   lines.push(`# Scan: ${s.manifest.name ?? s.root}`);
   lines.push(`- Ecosystem: ${s.manifest.ecosystem}; dependencies: ${s.manifest.dependencyCount}; lockfile: ${s.manifest.hasLockfile ? 'yes' : 'no'}`);
   lines.push(`- Project type: ${s.projectType}${s.frameworks.length ? ` (${s.frameworks.join(', ')})` : ''}`);
+  if (s.backends.length) lines.push(`- Backend-as-a-Service: ${s.backends.join(', ')} (data is protected by access rules, not client code)`);
   lines.push(`- Source: ${s.sourceFileCount} files, ~${s.totalLoc} lines; languages: ${Object.keys(s.languages).join(', ') || 'none detected'}`);
   lines.push(`- Tests: ${s.tests.present ? `${s.tests.testFileCount} file(s)` : 'none'}${s.tests.testCommand ? `; command: ${s.tests.testCommand}` : ''}`);
   lines.push(`- CI: ${s.ci.present ? s.ci.files.join(', ') : 'none detected'}`);
