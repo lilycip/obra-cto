@@ -52,9 +52,35 @@ describe('prepareCodeReview', () => {
     const bundle = await prepareCodeReview(root, { maxFiles: 14, maxBytes: 90_000, maxBytesPerFile: 12_000 });
     const schema = bundle.files.find((f) => f.path.endsWith('schema.sql'));
     expect(schema).toBeDefined();
-    expect(schema!.reason).toMatch(/data\/policy layer/);
+    expect(schema!.reason).toMatch(/data model \/ policy/);
     // The crown jewel outranks everything else.
     expect(bundle.files[0].path.endsWith('schema.sql')).toBe(true);
+  });
+
+  it('prioritizes the current schema over historical migrations and does not let migrations crowd out code', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'obra-cto-mig-'));
+    const ww = (rel: string, c: string) => fs.writeFile(path.join(dir, rel), c, 'utf8');
+    await fs.mkdir(path.join(dir, 'prisma', 'migrations', 'a'), { recursive: true });
+    await fs.mkdir(path.join(dir, 'prisma', 'migrations', 'b'), { recursive: true });
+    await fs.mkdir(path.join(dir, 'src'), { recursive: true });
+    await ww('prisma/schema.prisma', 'model User { id Int @id }\n'.repeat(10));
+    await ww('prisma/migrations/a/migration.sql', 'ALTER TABLE users ADD COLUMN x;\n');
+    await ww('prisma/migrations/b/migration.sql', 'ALTER TABLE users ADD COLUMN y;\n');
+    await ww('src/auth.ts', 'export function login() {}\n'.repeat(30));
+
+    const bundle = await prepareCodeReview(dir, { maxFiles: 4 });
+    const schema = bundle.files.find((f) => f.path.endsWith('schema.prisma'));
+    const mig = bundle.files.find((f) => f.path.endsWith('migration.sql'));
+    expect(schema).toBeDefined();
+    expect(schema!.reason).toMatch(/data model \/ policy/);
+    if (mig) expect(mig.reason).toMatch(/migration \(historical\)/);
+    // The real code is not crowded out by migrations.
+    expect(bundle.files.some((f) => f.path.endsWith('auth.ts'))).toBe(true);
+    // Schema outranks every migration.
+    const schemaIdx = bundle.files.findIndex((f) => f.path.endsWith('schema.prisma'));
+    const firstMigIdx = bundle.files.findIndex((f) => f.path.endsWith('migration.sql'));
+    if (firstMigIdx >= 0) expect(schemaIdx).toBeLessThan(firstMigIdx);
+    await fs.rm(dir, { recursive: true, force: true });
   });
 
   it('does not flag a UI file as security just because its name contains a hint substring', async () => {

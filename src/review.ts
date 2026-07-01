@@ -48,8 +48,6 @@ const SECURITY_HINTS = [
   'service', 'services', 'client', 'config', 'rules', 'rpc', 'store',
 ];
 
-/** Filename bases (as tokens) that mark data/policy files — the crown jewels. */
-const DATA_LAYER_TOKENS = ['schema', 'migration', 'migrations', 'policy', 'policies', 'rls'];
 const DATA_LAYER_EXTS = new Set(['.sql', '.prisma', '.graphql']);
 
 const ENTRY_HINTS = ['index', 'main', 'app', 'server', 'router', 'routes'];
@@ -109,12 +107,20 @@ function rankFile(rel: string, bytes: number): { weight: number; reason: string 
   const isTest = /\.(test|spec)\./.test(lower) || /(^|[\\/])(test|tests|__tests__)([\\/]|$)/.test(lower);
   if (isTest) weight -= 5; // tests are evidence elsewhere; not the read target
 
-  // Data / policy layer is the crown jewel for BaaS and DB-backed apps: this is
-  // where "can user A read user B's data" is decided. Never let it get crowded out.
-  const isDataLayer = DATA_LAYER_EXTS.has(ext) || DATA_LAYER_TOKENS.some((t) => toks.has(t));
-  if (isDataLayer) {
+  // Data / policy layer. The current SCHEMA (schema.prisma, db/schema.sql, a
+  // Drizzle schema.ts, RLS policy .sql) is the crown jewel: it decides "can user A
+  // read user B's data". Individual MIGRATIONS are historical noise, tiny and
+  // many, so they get only a nudge and must never crowd out the real code.
+  const isMigration = toks.has('migration') || toks.has('migrations');
+  const isNamedSchema =
+    base === 'schema' && (DATA_LAYER_EXTS.has(ext) || toks.has('db') || toks.has('drizzle') || toks.has('prisma'));
+  const isDataLayer = !isMigration && (DATA_LAYER_EXTS.has(ext) || isNamedSchema);
+  if (isMigration) {
+    weight += 2;
+    reasons.push('migration (historical)');
+  } else if (isDataLayer) {
     weight += 14;
-    reasons.push('data/policy layer');
+    reasons.push('data model / policy');
   }
 
   // Token-based match (no false positives from substrings like "db" in "AddButton").
@@ -130,6 +136,10 @@ function rankFile(rel: string, bytes: number): { weight: number; reason: string 
   // Bigger files carry more architecture signal, with diminishing return.
   weight += Math.min(5, Math.floor(bytes / 4000));
   if (bytes > 12000) reasons.push('large file');
+  // Trivially tiny files (re-export routes, one-line page links) rarely hold logic
+  // worth reviewing; do not let a name match float a stub over real code. Schema
+  // files are exempt: they already carry the big data-layer weight.
+  if (bytes < 300 && !isDataLayer) weight -= 2;
 
   return { weight, reason: reasons.join(', ') || 'general' };
 }
@@ -319,6 +329,8 @@ export async function prepareCodeReview(
   const files: ReviewFile[] = [];
   let used = 0;
   let truncated = false;
+  let dataFiles = 0;
+  const DATA_CAP = 3; // schema + a couple of migrations at most; the rest is noise
   for (const c of candidates) {
     if (files.length >= maxFiles) {
       truncated = true;
@@ -328,6 +340,9 @@ export async function prepareCodeReview(
       truncated = true;
       break;
     }
+    // The current schema matters; a pile of tiny migrations does not. Cap the layer.
+    const isData = /data model \/ policy|migration/.test(c.reason);
+    if (isData && dataFiles >= DATA_CAP) continue;
     let content = '';
     try {
       content = await fs.readFile(c.abs, 'utf8');
@@ -342,6 +357,7 @@ export async function prepareCodeReview(
     }
     used += content.length;
     files.push({ path: c.rel, reason: c.reason, content });
+    if (isData) dataFiles++;
   }
 
   return {
