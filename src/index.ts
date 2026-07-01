@@ -14,8 +14,9 @@
  *                         asks before running) and parse pass/fail counts
  *   - score_build_readiness  produce the Obra CTO Score with evidence grades
  *
- * The deep weighted scoring, the investor-facing materials, and the market
- * intelligence are the paid Obra CFO. This is the free preview of the lineup.
+ * This is the free preview of the lineup, and it stays free and local. The rest
+ * of the team (the Obra CFO for funding materials, and more), the current threat
+ * lens, and the build-in-public method live in the Build with Obra community.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -308,7 +309,9 @@ function formatReport(
   lines.push('---');
   lines.push('Evidence grades: A verified, B multiple sources, C partial or inferred, D claim only, E speculation. The Obra CTO Score is built from grade A and C evidence: what is true in your code, not what a deck says.');
   lines.push('');
-  lines.push('Next role: the Obra CFO turns this verified picture into funding-ready materials and the EU loan, grant, and investor path. Join the preview at get-obra.com.');
+  lines.push('This is your baseline, scored on what your code shows, not what a deck claims.');
+  lines.push('');
+  lines.push('Build with Obra is where the rest of the team lands first: the Obra CFO for funding-ready materials, and each new role as it ships. Join to get them early, and to see the build-in-public method behind them: https://www.skool.com/build-with-obra-5361');
   return lines.join('\n');
 }
 
