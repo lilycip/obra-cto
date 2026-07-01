@@ -43,7 +43,7 @@ Here is a run on a scrappy Supabase app (anonymized):
 
 ```
 # Obra CTO Score: financeapp
-## 46 / 100 — Not yet ready
+## 46 / 100 · Not yet ready
 Assessed as: mobile (react-native, expo)  |  Backend: supabase
 
 | Dimension        | Score | Evidence |
@@ -110,12 +110,12 @@ an investor's CTO would ask, answered from your real code.
 
 The Obra CTO is the free preview. To go further:
 
-- **The Method** — the full playbook for shipping production software with AI, the
+- **The Method:** the full playbook for shipping production software with AI, the
   disciplines that make code score like the example above, each lesson with a paste-in
   prompt or tool you can use today.
-- **The rest of the team** — the Obra CFO for funding-ready materials, and each new
+- **The rest of the team:** the Obra CFO for funding-ready materials, and each new
   role as it ships.
-- **Obra itself, in beta** — the AI employee that runs your back office. Members go first.
+- **Obra itself, in beta:** the AI employee that runs your back office. Members go first.
 
 It all lives in Build with Obra: https://www.skool.com/build-with-obra-5361/about
 

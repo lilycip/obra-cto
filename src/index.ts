@@ -81,7 +81,7 @@ server.registerTool(
   {
     title: 'Run tests',
     description:
-      "Run the project's test suite on this machine and parse pass/fail counts. This EXECUTES code, so your host will ask before it runs. A green suite is the strongest grade-A reliability evidence the Obra CTO Score can use. Pass the result numbers to score_build_readiness.",
+      "Run the project's test suite on this machine and parse pass/fail counts. This EXECUTES the project's own test command (for example `npm test`, which runs whatever that script defines), so only approve it for a project you trust to run. Your host asks before it runs. A green suite is the strongest grade-A reliability evidence the Obra CTO Score can use. Pass the result numbers to score_build_readiness.",
     inputSchema: {
       path: z.string().optional().describe('Project root. Defaults to the current working directory.'),
       command: z
@@ -276,7 +276,7 @@ function formatReport(
   const lines: string[] = [];
   lines.push(`# Obra CTO Score${name ? `: ${name}` : ''}`);
   lines.push('');
-  lines.push(`## ${r.total} / 100 — ${r.band}`);
+  lines.push(`## ${r.total} / 100 · ${r.band}`);
   lines.push('');
   if (projectType) {
     lines.push(`Assessed as: **${projectType}**${frameworks && frameworks.length ? ` (${frameworks.join(', ')})` : ''}`);
