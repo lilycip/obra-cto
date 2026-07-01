@@ -1,0 +1,46 @@
+{
+  "name": "obra-cto",
+  "version": "0.0.1",
+  "private": false,
+  "description": "Obra CTO — a local-first MCP that scores a codebase's Build Readiness. Your code never leaves your machine; your own Claude reads it and runs your tests. The free preview of Obra's role lineup.",
+  "license": "Apache-2.0",
+  "author": "Obra (https://get-obra.com)",
+  "homepage": "https://get-obra.com",
+  "keywords": [
+    "mcp",
+    "claude",
+    "code-review",
+    "build-readiness",
+    "technical-due-diligence",
+    "investor-readiness",
+    "obra"
+  ],
+  "type": "module",
+  "bin": {
+    "obra-cto": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "node dist/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.5",
+    "typescript": "5.4.5",
+    "vitest": "^2.1.9"
+  }
+}
