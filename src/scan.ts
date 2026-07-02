@@ -9,6 +9,16 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
+import {
+  scanSourceFile,
+  scanScriptFile,
+  scanPackageScripts,
+  summarizeThreats,
+  SCRIPT_EXTS,
+  type ThreatFinding,
+  type ThreatScan,
+} from './threats.js';
+
 /** Directories we never descend into. */
 const SKIP_DIRS = new Set([
   'node_modules',
@@ -75,6 +85,12 @@ export type ProjectSignals = {
    */
   backends: string[];
   suggestedStage: BuildStage;
+  /**
+   * Static malicious-code scan (TL-005). Reading a repo is safe; running its
+   * install scripts or tests is not. This is the tripwire that runs before you
+   * trust an unfamiliar repo. See threats.ts.
+   */
+  threats: ThreatScan;
 };
 
 export type BuildStage = 'prototype' | 'mvp' | 'growth';
@@ -185,6 +201,8 @@ export async function scanProject(root: string): Promise<ProjectSignals> {
   const secretLocations: string[] = [];
   const ciFiles: string[] = [];
   let committedEnvFile = false;
+  const threatFindings: ThreatFinding[] = [];
+  let threatFilesScanned = 0;
 
   async function walk(dir: string): Promise<void> {
     let listing: { files: string[]; dirs: string[] };
@@ -201,6 +219,20 @@ export async function scanProject(root: string): Promise<ProjectSignals> {
         committedEnvFile = true;
       }
       const ext = path.extname(f).toLowerCase();
+
+      // Shell / batch scripts: not counted as source, but scanned for malware
+      // (curl-pipe-to-shell and friends). Read with a size cap.
+      if (SCRIPT_EXTS.has(ext)) {
+        try {
+          const raw = await fs.readFile(abs, 'utf8');
+          threatFindings.push(...scanScriptFile(rel, raw.slice(0, 200_000)));
+          threatFilesScanned++;
+        } catch {
+          /* unreadable; skip */
+        }
+        continue;
+      }
+
       if (!SOURCE_EXTS.has(ext)) continue;
       sourceFileCount++;
       languages[ext] = (languages[ext] ?? 0) + 1;
@@ -218,6 +250,15 @@ export async function scanProject(root: string): Promise<ProjectSignals> {
       if (todoMatches) todos += todoMatches.length;
       for (const p of SECRET_PATTERNS) {
         if (p.re.test(content)) secretLocations.push(`${rel} (${p.name})`);
+      }
+      // Malware tripwire over the file we just read (no extra I/O). Skip test
+      // files: they legitimately contain sample attack strings (this very scanner's
+      // tests do), and they never run on install or import, so scanning them only
+      // adds false positives. The real TL-005 vectors (fires on install, fires on
+      // boot) live in production source and package.json hooks, which we still scan.
+      if (!looksLikeTest(rel)) {
+        threatFindings.push(...scanSourceFile(rel, content));
+        threatFilesScanned++;
       }
     }
     for (const d of listing.dirs) {
@@ -261,6 +302,19 @@ export async function scanProject(root: string): Promise<ProjectSignals> {
   const manifest = await readManifest(absRoot, lower);
   const tests = inferTests(manifest, testFileCount);
 
+  // package.json lifecycle hooks run automatically on `npm install`: the key
+  // auto-execution vector. Scan the script commands (values, not just names).
+  if (lower.has('package.json')) {
+    try {
+      const raw = await fs.readFile(path.join(absRoot, 'package.json'), 'utf8');
+      const pkg = JSON.parse(raw) as { scripts?: Record<string, string> };
+      threatFindings.push(...scanPackageScripts(pkg.scripts));
+    } catch {
+      /* unreadable or invalid JSON; skip */
+    }
+  }
+  const threats = summarizeThreats(threatFindings, threatFilesScanned);
+
   const { type: projectType, frameworks } = detectProjectType(manifest.dependencyNames, {
     hasBin: manifest.hasBin,
     hasTsx: (languages['.tsx'] ?? 0) > 0 || (languages['.jsx'] ?? 0) > 0 || (languages['.vue'] ?? 0) > 0 || (languages['.svelte'] ?? 0) > 0,
@@ -289,6 +343,7 @@ export async function scanProject(root: string): Promise<ProjectSignals> {
     frameworks,
     backends: detectBackends(manifest.dependencyNames),
     suggestedStage: 'mvp',
+    threats,
   };
   signals.suggestedStage = suggestStage(signals);
   return signals;

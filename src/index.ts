@@ -24,10 +24,11 @@ import { z } from 'zod';
 import { spawn } from 'node:child_process';
 
 import { scanProject, type BuildStage } from './scan.js';
-import { scoreBuildReadiness, type TestResult, type QualitativeInput } from './baf.js';
+import { scoreBuildReadiness, type TestResult, type QualitativeInput, type Risk } from './baf.js';
 import { prepareCodeReview } from './review.js';
 import { checkDependencies } from './deps.js';
 import { buildReportJson, writeCtoReport, REPORT_DIR, REPORT_JSON, TOOL_VERSION } from './report.js';
+import { hasInstallHook, type ThreatScan } from './threats.js';
 
 const server = new McpServer({ name: 'obra-cto', version: TOOL_VERSION });
 
@@ -68,8 +69,10 @@ server.registerTool(
   async ({ path }) => {
     const root = path ?? process.cwd();
     const signals = await scanProject(root);
+    const threatText = formatThreatSection(signals.threats);
     return {
       content: [
+        ...(threatText ? [{ type: 'text' as const, text: threatText }] : []),
         { type: 'text', text: formatSignals(signals) },
         { type: 'text', text: '```json\n' + JSON.stringify(signals, null, 2) + '\n```' },
       ],
@@ -89,12 +92,32 @@ server.registerTool(
         .string()
         .optional()
         .describe('Override the test command (e.g. "pytest -q"). Defaults to the detected command.'),
+      acknowledge_risk: z
+        .boolean()
+        .optional()
+        .describe(
+          'Only relevant if the malware tripwire flagged this repo as dangerous. Running the test command would execute the flagged code. Set true ONLY after you have inspected the findings and are running in a throwaway sandbox with no keys or logins.',
+        ),
     },
     annotations: { title: 'Run tests', readOnlyHint: false, openWorldHint: false },
   },
-  async ({ path, command }) => {
+  async ({ path, command, acknowledge_risk }) => {
     const root = path ?? process.cwd();
     const signals = await scanProject(root);
+    // Malware gate: never execute a project's own command when static checks flag
+    // it as dangerous, unless the caller has inspected the findings and opted in.
+    if (signals.threats.verdict === 'dangerous' && acknowledge_risk !== true) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text:
+              formatThreatSection(signals.threats) +
+              '\n\nrun_tests refused. This project matched malicious-code patterns, and its test command would execute that code on this machine. Inspect the findings above first. If you have reviewed them and are on a throwaway sandbox with no keys, logins, or VPN, call run_tests again with acknowledge_risk: true.',
+          },
+        ],
+      };
+    }
     const cmd = command ?? signals.tests.testCommand;
     if (!cmd) {
       return {
@@ -251,8 +274,10 @@ server.registerTool(
           }
         : null;
     const qual = qualitative as QualitativeInput | undefined;
-    const report = scoreBuildReadiness(signals, testResult, chosenStage, qual);
+    const extraRisks = malwareRisks(signals.threats);
+    const report = scoreBuildReadiness(signals, testResult, chosenStage, qual, extraRisks);
     const md = formatReport(report, signals.manifest.name, signals.projectType, signals.frameworks);
+    const threatText = formatThreatSection(signals.threats);
 
     let handoffNote = '';
     if (write_report !== false) {
@@ -278,11 +303,55 @@ server.registerTool(
         handoffNote = `\n\n---\nCould not write the report file: ${(err as Error).message}`;
       }
     }
-    return { content: [{ type: 'text', text: md + handoffNote }] };
+    return { content: [{ type: 'text', text: (threatText ? threatText + '\n\n' : '') + md + handoffNote }] };
   },
 );
 
 // ── Formatting ────────────────────────────────────────────────────────────────
+
+/** Map dangerous (critical/high) malware findings into scored-report risks. */
+function malwareRisks(threats: ThreatScan): Risk[] {
+  return threats.findings
+    .filter((f) => f.severity === 'critical' || f.severity === 'high')
+    .map((f) => ({
+      title: `Possible malicious code: ${f.title} in ${f.file}${f.line ? `:${f.line}` : ''}`,
+      severity: f.severity,
+      grade: 'A' as const,
+      fix: f.why,
+    }));
+}
+
+/**
+ * Render the safety section for a threat scan. Empty string when there is nothing
+ * to say (clean and no install hooks), so callers can conditionally prepend it.
+ */
+function formatThreatSection(threats: ThreatScan): string {
+  if (threats.verdict === 'clean' && !hasInstallHook(threats)) return '';
+  const lines: string[] = [];
+  if (threats.verdict === 'dangerous') {
+    lines.push('## SAFETY WARNING: this repository may be malicious');
+    lines.push('');
+    lines.push(
+      'Static checks matched patterns from the clone-this-repo malware family (threat-lens TL-005). Do NOT run `npm install`, `npm start`, an install hook, or the test suite on this project on a real machine. Reading the files is safe. Executing them is not. Inspect every finding below before you trust this repo. If you must run it, use a throwaway sandbox with no keys, logins, or VPN.',
+    );
+  } else if (threats.verdict === 'suspicious') {
+    lines.push('## Safety notes');
+    lines.push('');
+    lines.push('Static checks matched patterns worth a look before you run this project.');
+  } else {
+    lines.push('## Safety notes');
+    lines.push('');
+    lines.push('This project runs scripts automatically on install. Read them before you run `npm install`.');
+  }
+  lines.push('');
+  for (const f of threats.findings) {
+    const loc = `${f.file}${f.line ? `:${f.line}` : ''}`;
+    lines.push(`- **[${f.severity}]** ${f.title} (\`${loc}\`)`);
+    lines.push(`  - ${f.why}`);
+    if (f.evidence) lines.push(`  - Evidence: \`${f.evidence}\``);
+  }
+  return lines.join('\n');
+}
 
 function formatSignals(s: Awaited<ReturnType<typeof scanProject>>): string {
   const lines: string[] = [];
@@ -295,6 +364,7 @@ function formatSignals(s: Awaited<ReturnType<typeof scanProject>>): string {
   lines.push(`- CI: ${s.ci.present ? s.ci.files.join(', ') : 'none detected'}`);
   lines.push(`- Docs: README ${s.hasReadme ? 'yes' : 'no'}, LICENSE ${s.hasLicense ? 'yes' : 'no'}`);
   lines.push(`- Hygiene: committed .env ${s.committedEnvFile ? 'YES (risk)' : 'no'}; secret hits ${s.secrets.suspectCount}; TODO markers ${s.todos}`);
+  lines.push(`- Safety: ${s.threats.verdict}${s.threats.findings.length ? ` (${s.threats.findings.length} finding(s); see the safety section)` : ''}`);
   lines.push(`- Suggested stage: ${s.suggestedStage}`);
   lines.push('');
   lines.push('Next: optionally call run_tests, then call score_build_readiness.');

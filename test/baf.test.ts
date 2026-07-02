@@ -31,6 +31,7 @@ function makeSignals(overrides: Partial<ProjectSignals> = {}): ProjectSignals {
     frameworks: [],
     backends: [],
     suggestedStage: 'mvp',
+    threats: { verdict: 'clean', findings: [], filesScanned: 12 },
     ...overrides,
   };
 }

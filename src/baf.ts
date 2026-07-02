@@ -79,6 +79,7 @@ export function scoreBuildReadiness(
   testResult: TestResult,
   stage: BuildStage,
   qualitative?: QualitativeInput,
+  extraRisks?: Risk[],
 ): BuildReadinessReport {
   const dimensions: DimensionResult[] = [
     scoreSecurity(signals, stage, qualitative?.security),
@@ -90,8 +91,12 @@ export function scoreBuildReadiness(
   ];
 
   const total = Math.round(dimensions.reduce((sum, d) => sum + d.score, 0));
+  // Extra risks (e.g. malicious-code findings from the TL-005 tripwire) are not a
+  // scored dimension; they are safety flags that ride into the risk register and
+  // drive the verdict, so a repo with a backdoor reads as critical, not as a number.
   const topRisks = dimensions
     .flatMap((d) => d.risks)
+    .concat(extraRisks ?? [])
     .sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity])
     .slice(0, 8);
 

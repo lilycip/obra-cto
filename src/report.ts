@@ -18,7 +18,7 @@ import type { BuildReadinessReport, TestResult, EvidenceGrade } from './baf.js';
 import type { BuildStage } from './scan.js';
 
 /** Kept in sync with package.json. The CFO reads this to know which contract it got. */
-export const TOOL_VERSION = '0.2.0';
+export const TOOL_VERSION = '0.3.0';
 
 export const REPORT_DIR = '.obra';
 export const REPORT_JSON = 'cto-report.json';
