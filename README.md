@@ -10,6 +10,15 @@ security holes, weak design decisions, and the gaps that stop a serious review. 
 rest of the team (the Obra CFO for funding-ready materials, and more) lives in the
 Build with Obra community.
 
+## The Obra founders' toolkit
+
+Two free, local, open-source MCPs built to work as a pair:
+
+- **Obra CTO** (this one): is it built? Scores your codebase and surfaces what a technical diligence would flag. [GitHub](https://github.com/lilycip/obra-cto) · [npm](https://www.npmjs.com/package/obra-cto)
+- **Obra CFO**: is it fundable? Runs the investment committee on your pitch and turns your verified build into a funding case. [GitHub](https://github.com/lilycip/obra-cfo) · [npm](https://www.npmjs.com/package/obra-cfo)
+
+Run the CTO first. The CFO reads its report as grade-A technical evidence. The method, the deep versions, and Obra in beta live in [Build with Obra](https://www.skool.com/build-with-obra-5361/about).
+
 ## Why local-first
 
 A tool that reads your code should not ship your code somewhere. This server makes
