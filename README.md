@@ -21,9 +21,12 @@ Run the CTO first. The CFO reads its report as grade-A technical evidence. The m
 
 ## Why local-first
 
-A tool that reads your code should not ship your code somewhere. This server makes
-no network calls. It returns counts, presence flags, a redacted secrets scan, and a
-score. Your source stays where it is. You can read every line of this server before
+A tool that reads your code should not ship your code somewhere. Your source never
+leaves your machine. This server makes exactly one kind of network call, and only
+when you run the dependency check: it sends your package names and versions to the
+OSV vulnerability database, never a line of your code (you can see the single call
+in `src/deps.ts`). Everything else is local: it returns counts, presence flags, a
+redacted secrets scan, and a score. You can read every line of this server before
 you run it, which is the point of keeping it open.
 
 ## What you get
